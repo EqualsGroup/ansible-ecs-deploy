@@ -1,5 +1,8 @@
 ---
 
+- debug:
+    msg: "cluster: {{ aws_ecs_cluster }} service: {{ aws_ecs_service }} task definition arn: {{ aws_ecs_task_definition_arn }}"
+
 - name: Assume deployer role
   sts_assume_role:
     role_arn: "{{ assume_role_arn }}"

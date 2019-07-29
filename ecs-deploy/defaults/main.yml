@@ -9,4 +9,4 @@ aws_region: eu-west-2
 
 aws_ecs_cluster: "{{ lookup('env', 'AWS_ECS_CLUSTER') | default(service + '-' + env, true) }}"
 aws_ecs_service: "{{ lookup('env', 'AWS_ECS_SERVICE') | default(service + '-' + env, true) }}"
-aws_ecs_task_definition_arn: "{{ lookup('env', 'AWS_ECS_TASK_DEFINITION_ARN') | default('', true) }}"
+aws_ecs_task_definition_arn: "{{ lookup('env','AWS_ECS_TASK_DEFINITION_ARN') | default(null, true) }}"

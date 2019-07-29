@@ -1,5 +1,15 @@
 ---
 
+- name: Verify required variables
+  fail:
+    msg: "Required variable not set"
+  when:
+    - service is not defined
+    - env is not defined
+    - aws_ecs_cluster is not defined
+    - aws_ecs_service is not defined
+    - aws_ecs_task_definition_arn is not defined
+
 - debug:
     msg: "cluster: {{ aws_ecs_cluster }} service: {{ aws_ecs_service }} task definition arn: {{ aws_ecs_task_definition_arn }}"
 
@@ -20,13 +30,6 @@
     AWS_DEFAULT_REGION: "{{ aws_region }}"
   register: result
   failed_when: "aws_ecs_task_definition_arn not in result.stdout"
-
-# - set_fact:
-#     published_task_definition_arn: "{{ (result.stdout | from_json).get('service').get('taskDefinition').strip() }}"
-
-# - fail:
-#     msg: verify published task definition
-#   when: aws_ecs_task_definition_arn != published_task_definition_arn
 
 - name: verify deployment
   shell: "aws ecs describe-services --region {{ aws_region }} --services {{ aws_ecs_service }} --cluster {{ aws_ecs_cluster }} --query 'services[*].deployments[?(status==`PRIMARY` && taskDefinition==`{{ aws_ecs_task_definition_arn }}`)].desiredCount' --output text"

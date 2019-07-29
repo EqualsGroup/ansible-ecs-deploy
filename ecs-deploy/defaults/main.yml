@@ -5,8 +5,10 @@ env: "{{ lookup('env','ENV') | default(null, true) }}" #because 'environment' is
 
 assume_role_arn: "{{ lookup('aws_ssm', '/'+ service +'/'+ env +'/roles/deployer' ) }}"
 role_duration: 900
-aws_region: eu-west-2
 
+default_healthcheck_grace_period: 300
+
+aws_region: eu-west-2
 aws_ecs_cluster: "{{ lookup('env', 'AWS_ECS_CLUSTER') | default(service + '-' + env, true) }}"
 aws_ecs_service: "{{ lookup('env', 'AWS_ECS_SERVICE') | default(service + '-' + env, true) }}"
 aws_ecs_task_definition_arn: "{{ lookup('env','AWS_ECS_TASK_DEFINITION_ARN') | default(null, true) }}"

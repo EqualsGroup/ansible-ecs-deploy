@@ -1,0 +1,42 @@
+---
+# tasks file for ecs-deploy
+
+- name: update ECS service
+  shell: "aws ecs update-service --region {{ aws_region }} --service {{ aws_ecs_service }} --cluster {{ aws_ecs_cluster }} --task-definition {{ aws_ecs_task_definition_arn }} --force-new-deployment"
+  register: result
+  failed_when: "aws_ecs_task_definition_arn not in result.stdout"
+
+- set_fact:
+    published_task_definition: "{{ (result.stdout | from_json).get('service').get('taskDefinition').strip() }}"
+
+- assert:
+    msg: verify published task definition
+    that: "aws_ecs_task_definition_arn == published_task_definition"
+
+- name: verify deployment
+  shell: "aws ecs describe-services --region {{ aws_region }} --services {{ aws_ecs_service }} --cluster {{ aws_ecs_cluster }} --query 'services[*].deployments[?(status==`PRIMARY` && taskDefinition==`{{ aws_ecs_task_definition_arn }}`)].desiredCount' --output text"
+  register: desiredCount
+  failed_when: desiredCount.stdout.strip() == "0"
+  retries: 30
+  delay: 1
+  until: desiredCount.stdout.strip() != "0"
+
+- name: verify PRIMARY deployment
+  shell: "aws ecs describe-services --region {{ aws_region }} --services {{ aws_ecs_service }} --cluster {{ aws_ecs_cluster }} --query 'services[*].deployments[?(status==`PRIMARY` && taskDefinition==`{{ aws_ecs_task_definition_arn }}`)].runningCount' --output text"
+  register: runningCount
+  failed_when: runningCount.stdout.strip() != desiredCount.stdout.strip()
+  retries: 600
+  delay: 1
+  until: runningCount.stdout.strip() == desiredCount.stdout.strip()
+
+- name: get healthcheck grace period
+  shell: "aws ecs describe-services --region {{ aws_region }} --services {{ aws_ecs_service }} --cluster {{ aws_ecs_cluster }} --query 'services[?serviceName==`{{ aws_ecs_service }}`].healthCheckGracePeriodSeconds' --output text"
+  register: healthCheckGracePeriodSeconds
+
+- name: verify completion of rolling deployment
+  shell: "aws ecs describe-services --region {{ aws_region }} --services {{ aws_ecs_service }} --cluster {{ aws_ecs_cluster }} --query 'services[*].deployments[*]' --output text"
+  register: activeDeployment
+  failed_when: activeDeployment.stdout.find("ACTIVE") != -1
+  retries: "{{ [default_healthcheck_grace_period, healthCheckGracePeriodSeconds.stdout | int] | max}}"
+  delay: 1
+  until: activeDeployment.stdout.find("ACTIVE") == -1

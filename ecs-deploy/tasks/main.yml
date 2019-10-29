@@ -51,6 +51,5 @@
         aws_ecs_task_definition_arn: "{{ pre_deploy_task_defintion_arn }}"
     - include: deploy.yml
       static: no
-    - name: "ECS rollback complete"
-      debug:
-        msg: "ECS rollback to {{ pre_deploy_task_defintion_arn }}"
+    - fail:
+        msg: "ECS Deployment failed. Rollback complete."

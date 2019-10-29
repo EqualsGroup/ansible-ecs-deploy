@@ -21,44 +21,36 @@
   register: assumed_role
   changed_when: false
 
-- name: update ECS service
-  shell: "aws ecs update-service --region {{ aws_region }} --service {{ aws_ecs_service }} --cluster {{ aws_ecs_cluster }} --task-definition {{ aws_ecs_task_definition_arn }} --force-new-deployment"
-  environment: &aws_credentials
-    AWS_ACCESS_KEY_ID: "{{ assumed_role.sts_creds.access_key }}"
-    AWS_SECRET_ACCESS_KEY: "{{ assumed_role.sts_creds.secret_key }}"
-    AWS_SESSION_TOKEN: "{{ assumed_role.sts_creds.session_token }}"
-    AWS_DEFAULT_REGION: "{{ aws_region }}"
-  register: result
-  failed_when: "aws_ecs_task_definition_arn not in result.stdout"
+- set_fact:
+    aws_env_credentials:
+      AWS_ACCESS_KEY_ID: "{{ assumed_role.sts_creds.access_key }}"
+      AWS_SECRET_ACCESS_KEY: "{{ assumed_role.sts_creds.secret_key }}"
+      AWS_SESSION_TOKEN: "{{ assumed_role.sts_creds.session_token }}"
+      AWS_DEFAULT_REGION: "{{ aws_region }}"
+  changed_when: false
 
-- name: verify deployment
-  shell: "aws ecs describe-services --region {{ aws_region }} --services {{ aws_ecs_service }} --cluster {{ aws_ecs_cluster }} --query 'services[*].deployments[?(status==`PRIMARY` && taskDefinition==`{{ aws_ecs_task_definition_arn }}`)].desiredCount' --output text"
-  environment: *aws_credentials
-  register: desiredCount
-  failed_when: desiredCount.stdout.strip() == "0"
-  retries: 30
-  delay: 1
-  until: desiredCount.stdout.strip() != "0"
-
-- name: verify PRIMARY deployment
-  shell: "aws ecs describe-services --region {{ aws_region }} --services {{ aws_ecs_service }} --cluster {{ aws_ecs_cluster }} --query 'services[*].deployments[?(status==`PRIMARY` && taskDefinition==`{{ aws_ecs_task_definition_arn }}`)].runningCount' --output text"
-  environment: *aws_credentials
-  register: runningCount
-  failed_when: runningCount.stdout.strip() != desiredCount.stdout.strip()
-  retries: 600
-  delay: 1
-  until: runningCount.stdout.strip() == desiredCount.stdout.strip()
+- name: get pre-deploy task definition
+  shell: "aws ecs describe-services --region {{ aws_region }} --services {{ aws_ecs_service }} --cluster {{ aws_ecs_cluster }} --query 'services[*].taskDefinition' --output text"
+  environment: "{{ aws_env_credentials }}"
+  register: pre_deploy_task_defintion_arn
+  failed_when: pre_deploy_task_defintion_arn.stdout.strip() == ""
 
 - name: get healthcheck grace period
-  shell: "aws ecs describe-services --region {{ aws_region }} --services {{ aws_ecs_service }} --cluster {{ aws_ecs_cluster }} --query 'services[?serviceName==`{{ aws_ecs_service }}`].healthCheckGracePeriodSeconds' --output text"
-  environment: *aws_credentials
+  shell: "aws ecs describe-services --region {{ aws_region }} --services {{ aws_ecs_service }} --cluster {{ aws_ecs_cluster }} --query 'services[*].healthCheckGracePeriodSeconds' --output text"
+  environment: "{{ aws_env_credentials }}"
   register: healthCheckGracePeriodSeconds
 
-- name: verify completion of rolling deployment
-  shell: "aws ecs describe-services --region {{ aws_region }} --services {{ aws_ecs_service }} --cluster {{ aws_ecs_cluster }} --query 'services[*].deployments[*]' --output text"
-  environment: *aws_credentials
-  register: activeDeployment
-  failed_when: activeDeployment.stdout.find("ACTIVE") != -1
-  retries: "{{ [default_healthcheck_grace_period, healthCheckGracePeriodSeconds.stdout | int] | max}}"
-  delay: 1
-  until: activeDeployment.stdout.find("ACTIVE") == -1
+- set_fact:
+    pre_deploy_task_defintion_arn: "{{ pre_deploy_task_defintion_arn.stdout.strip() }}"
+
+- block:
+    - include: deploy.yml
+      static: no
+  rescue:
+    - name: "ECS Deployment failed"
+      debug:
+        msg: "Attempting rollback to {{ pre_deploy_task_defintion_arn }}"
+    - set_fact:
+        aws_ecs_task_definition_arn: "{{ pre_deploy_task_defintion_arn }}"
+    - include: deploy.yml
+      static: no

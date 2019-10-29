@@ -10,9 +10,6 @@
     - aws_ecs_service is not defined
     - aws_ecs_task_definition_arn is not defined
 
-- debug:
-    msg: "cluster: {{ aws_ecs_cluster }} service: {{ aws_ecs_service }} task definition arn: {{ aws_ecs_task_definition_arn }}"
-
 - name: Assume deployer role
   sts_assume_role:
     role_arn: "{{ assume_role_arn }}"
@@ -29,13 +26,13 @@
       AWS_DEFAULT_REGION: "{{ aws_region }}"
   changed_when: false
 
-- name: get pre-deploy task definition
+- name: Get pre-deploy task definition
   shell: "aws ecs describe-services --region {{ aws_region }} --services {{ aws_ecs_service }} --cluster {{ aws_ecs_cluster }} --query 'services[*].taskDefinition' --output text"
   environment: "{{ aws_env_credentials }}"
   register: pre_deploy_task_defintion_arn
   failed_when: pre_deploy_task_defintion_arn.stdout.strip() == ""
 
-- name: get healthcheck grace period
+- name: Get healthcheck grace period
   shell: "aws ecs describe-services --region {{ aws_region }} --services {{ aws_ecs_service }} --cluster {{ aws_ecs_cluster }} --query 'services[*].healthCheckGracePeriodSeconds' --output text"
   environment: "{{ aws_env_credentials }}"
   register: healthCheckGracePeriodSeconds
@@ -47,7 +44,7 @@
     - include: deploy.yml
       static: no
   rescue:
-    - name: "ECS Deployment failed"
+    - name: "ECS deployment failed"
       debug:
         msg: "Attempting rollback to {{ pre_deploy_task_defintion_arn }}"
     - set_fact:

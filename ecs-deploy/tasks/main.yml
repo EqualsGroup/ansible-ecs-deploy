@@ -10,21 +10,42 @@
     - aws_ecs_service is not defined
     - aws_ecs_task_definition_arn is not defined
 
-- name: Assume deployer role
+- name: Assuming deployer role
   sts_assume_role:
     role_arn: "{{ assume_role_arn }}"
     role_session_name: "deploy"
     duration_seconds: "{{ role_duration }}"
   register: assumed_role
   changed_when: false
+  when: 
+    - assume_role_arn is defined
+    - assume_role_arn != ""
+    - assume_role_arn != false
+
+- name: "assume_role_arn is false, using existing AWS credentials"
+  set_fact:
+    assumed_role: false
+  when:
+    - not assume_role_arn
 
 - set_fact:
     aws_env_credentials:
-      AWS_ACCESS_KEY_ID: "{{ assumed_role.sts_creds.access_key }}"
-      AWS_SECRET_ACCESS_KEY: "{{ assumed_role.sts_creds.secret_key }}"
-      AWS_SESSION_TOKEN: "{{ assumed_role.sts_creds.session_token }}"
+      AWS_ACCESS_KEY_ID: "{{ assumed_role.sts_creds.access_key | default('') }}"
+      AWS_SECRET_ACCESS_KEY: "{{ assumed_role.sts_creds.secret_key | default('') }}"
+      AWS_SESSION_TOKEN: "{{ assumed_role.sts_creds.session_token | default('') }}"
+      AWS_DEFAULT_REGION: "{{ aws_region | default('') }}"
+  changed_when: false
+  when: 
+    - assumed_role is defined
+    - assumed_role != ""
+    - assumed_role != false
+
+- set_fact:
+    aws_env_credentials:
       AWS_DEFAULT_REGION: "{{ aws_region }}"
   changed_when: false
+  when: 
+    - not assumed_role 
 
 - name: Get pre-deploy task definition
   shell: "aws ecs describe-services --region {{ aws_region }} --services {{ aws_ecs_service }} --cluster {{ aws_ecs_cluster }} --query 'services[*].taskDefinition' --output text"
